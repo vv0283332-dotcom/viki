@@ -53,12 +53,34 @@
       </div>
 
       <form id="postForm" class="composer">
+
         <textarea id="postContent" maxlength="5000"
           placeholder="What's happening on VIKI?"></textarea>
+
+        <div class="media-picker">
+          <label for="postMedia" class="media-button">
+            🎥 Photo / Video
+          </label>
+
+          <input
+            id="postMedia"
+            type="file"
+            accept="image/*,video/mp4,video/webm,video/quicktime"
+            class="hidden"
+          >
+
+          <span id="mediaName" class="muted">No media selected</span>
+        </div>
+
+        <div id="mediaPreview" class="media-preview hidden"></div>
+
         <div class="composer-bottom">
           <span id="charCount">0 / 5000</span>
           <button type="submit" class="primary">Post</button>
         </div>
+
+        <div id="uploadStatus" class="muted"></div>
+
       </form>
 
       <div id="feed" class="feed"></div>

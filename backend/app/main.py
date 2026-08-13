@@ -3,7 +3,10 @@ import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
-from fastapi import Depends, FastAPI, HTTPException
+import os
+import cloudinary
+import cloudinary.uploader
+from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -71,6 +74,18 @@ app = FastAPI(
     title="VIKI API",
     version="1.1.0",
     description="VIKI social media and creator economy API",
+)
+
+
+# =========================
+# CLOUDINARY MEDIA STORAGE
+# =========================
+
+cloudinary.config(
+    cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
+    api_key=os.getenv("CLOUDINARY_API_KEY"),
+    api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+    secure=True,
 )
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent / "uploads"
@@ -322,6 +337,64 @@ def unfollow_user(
         "following": False,
         "removed": bool(deleted),
     }
+
+
+# =========================
+# MEDIA UPLOAD
+# =========================
+
+@app.post("/upload-media")
+async def upload_media(
+    file: UploadFile = File(...),
+    user: User = Depends(current_user),
+):
+    if not file.filename:
+        raise HTTPException(400, "No file selected")
+
+    content_type = (file.content_type or "").lower()
+
+    allowed = {
+        "video/mp4": "video",
+        "video/webm": "video",
+        "video/quicktime": "video",
+        "image/jpeg": "image",
+        "image/png": "image",
+        "image/webp": "image",
+    }
+
+    if content_type not in allowed:
+        raise HTTPException(
+            400,
+            "Only MP4, WebM, MOV, JPG, PNG and WEBP files are allowed",
+        )
+
+    media_type = allowed[content_type]
+
+    # 100 MB maximum
+    contents = await file.read()
+
+    if len(contents) > 100 * 1024 * 1024:
+        raise HTTPException(413, "File is too large. Maximum size is 100 MB.")
+
+    try:
+        result = cloudinary.uploader.upload(
+            contents,
+            resource_type="video" if media_type == "video" else "image",
+            folder="viki",
+        )
+
+        return {
+            "success": True,
+            "url": result["secure_url"],
+            "media_type": media_type,
+            "public_id": result.get("public_id"),
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            500,
+            f"Media upload failed: {str(exc)}",
+        )
 
 
 # =========================

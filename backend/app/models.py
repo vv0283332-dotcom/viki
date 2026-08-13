@@ -99,6 +99,25 @@ class Post(Base):
     content: Mapped[str] = mapped_column(Text)
     media_url: Mapped[str] = mapped_column(String(1000), default="")
     media_type: Mapped[str] = mapped_column(String(20), default="none")
+
+    music_url: Mapped[str] = mapped_column(
+        String(1000),
+        default="",
+        nullable=False,
+    )
+
+    music_title: Mapped[str] = mapped_column(
+        String(255),
+        default="",
+        nullable=False,
+    )
+
+    music_artist: Mapped[str] = mapped_column(
+        String(255),
+        default="",
+        nullable=False,
+    )
+
     created_at: Mapped[datetime] = mapped_column(DateTime, default=now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=now)
 

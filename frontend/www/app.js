@@ -125,6 +125,79 @@ $("postContent").oninput = () => {
     `${$("postContent").value.length} / 5000`;
 };
 
+
+// =========================
+// MEDIA PICKER
+// =========================
+
+$("postMedia").onchange = () => {
+  const file = $("postMedia").files[0];
+
+  const preview = $("mediaPreview");
+  const name = $("mediaName");
+
+  preview.innerHTML = "";
+
+  if (!file) {
+    name.textContent = "No media selected";
+    preview.classList.add("hidden");
+    return;
+  }
+
+  name.textContent = file.name;
+
+  const url = URL.createObjectURL(file);
+
+  if (file.type.startsWith("video/")) {
+    preview.innerHTML = `
+      <video
+        src="${url}"
+        controls
+        playsinline
+        preload="metadata">
+      </video>
+    `;
+  } else if (file.type.startsWith("image/")) {
+    preview.innerHTML = `
+      <img
+        src="${url}"
+        alt="Post preview">
+    `;
+  }
+
+  preview.classList.remove("hidden");
+};
+
+
+// =========================
+// UPLOAD MEDIA
+// =========================
+
+async function uploadPostMedia(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  $("uploadStatus").textContent = "Uploading media...";
+
+  const response = await fetch(`${API}/upload-media`, {
+    method: "POST",
+    headers: token
+      ? {"Authorization": `Bearer ${token}`}
+      : {},
+    body: formData
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(data.detail || "Media upload failed");
+  }
+
+  $("uploadStatus").textContent = "Media uploaded.";
+
+  return data;
+}
+
 $("postForm").onsubmit = async (event) => {
   event.preventDefault();
 
@@ -133,20 +206,44 @@ $("postForm").onsubmit = async (event) => {
   if (!content) return;
 
   try {
+    let mediaUrl = "";
+    let mediaType = "none";
+
+    const mediaFile = $("postMedia").files[0];
+
+    if (mediaFile) {
+      if (mediaFile.size > 100 * 1024 * 1024) {
+        throw new Error("Media must be 100 MB or smaller.");
+      }
+
+      const uploaded = await uploadPostMedia(mediaFile);
+
+      mediaUrl = uploaded.url;
+      mediaType = uploaded.media_type;
+    }
+
     await api("/posts", {
       method: "POST",
       body: JSON.stringify({
         content,
-        media_url: "",
-        media_type: "none"
+        media_url: mediaUrl,
+        media_type: mediaType
       })
     });
 
     $("postContent").value = "";
     $("charCount").textContent = "0 / 5000";
 
+    $("postMedia").value = "";
+    $("mediaName").textContent = "No media selected";
+    $("mediaPreview").innerHTML = "";
+    $("mediaPreview").classList.add("hidden");
+    $("uploadStatus").textContent = "";
+
     await loadFeed();
+
   } catch (error) {
+    $("uploadStatus").textContent = "";
     alert(error.message);
   }
 };
@@ -180,6 +277,34 @@ async function loadFeed() {
         </div>
 
         <div class="post-content">${escapeHtml(post.content)}</div>
+
+        ${
+          post.media_url && post.media_type === "video"
+            ? `
+              <div class="post-media">
+                <video
+                  src="${escapeHtml(post.media_url)}"
+                  controls
+                  playsinline
+                  preload="metadata">
+                </video>
+              </div>
+            `
+            : ""
+        }
+
+        ${
+          post.media_url && post.media_type === "image"
+            ? `
+              <div class="post-media">
+                <img
+                  src="${escapeHtml(post.media_url)}"
+                  alt="VIKI post image"
+                  loading="lazy">
+              </div>
+            `
+            : ""
+        }
 
         <div class="post-actions">
           <button onclick="toggleLike(${post.id}, ${post.liked_by_me})">

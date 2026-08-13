@@ -507,3 +507,65 @@ textarea {
   transform: scale(0.97);
 }
 
+
+/* =========================
+   VIKI MEDIA POSTS
+   ========================= */
+
+.media-picker {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.media-button {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 13px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.media-button:hover {
+  opacity: 0.8;
+}
+
+.media-preview {
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.media-preview video,
+.media-preview img {
+  display: block;
+  width: 100%;
+  max-height: 420px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+.post-media {
+  margin-top: 12px;
+  overflow: hidden;
+  border-radius: 14px;
+}
+
+.post-media video,
+.post-media img {
+  display: block;
+  width: 100%;
+  max-height: 650px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+#uploadStatus {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
