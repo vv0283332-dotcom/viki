@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">VIKI</string>
+    <string name="title_activity_main">VIKI</string>
+    <string name="package_name">com.viki.wallet</string>
+    <string name="custom_url_scheme">com.viki.wallet</string>
+</resources>

@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#111111">
+  <title>VIKI — Create. Connect. Earn.</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <header class="topbar">
+    <div class="brand">VIKI</div>
+    <div class="tagline">Create. Connect. Earn.</div>
+    <button id="logoutBtn" class="hidden">Logout</button>
+  </header>
+
+  <section id="authScreen" class="screen auth-screen">
+    <div class="auth-card">
+      <div class="logo">VIKI</div>
+      <p class="muted">Create. Connect. Earn.</p>
+
+      <div class="auth-tabs">
+        <button id="loginTab" class="active">Login</button>
+        <button id="registerTab">Create account</button>
+      </div>
+
+      <form id="loginForm">
+        <input id="loginEmail" type="email" placeholder="Email" required>
+        <input id="loginPassword" type="password" placeholder="Password" required>
+        <button type="submit" class="primary">Login</button>
+      </form>
+
+      <form id="registerForm" class="hidden">
+        <input id="registerName" type="text" placeholder="Full name" required>
+        <input id="registerUsername" type="text" placeholder="Username" minlength="3" maxlength="30" required>
+        <input id="registerEmail" type="email" placeholder="Email" required>
+        <input id="registerPassword" type="password" placeholder="Password (8+ characters)" minlength="8" required>
+        <button type="submit" class="primary">Create account</button>
+      </form>
+
+      <p id="authMessage" class="message"></p>
+    </div>
+  </section>
+
+  <main id="mainApp" class="hidden">
+
+    <section id="homeView" class="view active-view">
+      <div class="view-header">
+        <h2>For You</h2>
+      </div>
+
+      <form id="postForm" class="composer">
+        <textarea id="postContent" maxlength="5000"
+          placeholder="What's happening on VIKI?"></textarea>
+        <div class="composer-bottom">
+          <span id="charCount">0 / 5000</span>
+          <button type="submit" class="primary">Post</button>
+        </div>
+      </form>
+
+      <div id="feed" class="feed"></div>
+    </section>
+
+    <section id="searchView" class="view">
+      <div class="view-header">
+        <h2>Discover</h2>
+      </div>
+
+      <div class="search-box">
+        <input id="searchInput" type="search" placeholder="Search VIKI">
+        <button id="searchBtn" class="primary">Search</button>
+      </div>
+
+      <div id="searchResults"></div>
+    </section>
+
+    <section id="profileView" class="view">
+      <div class="profile-card">
+        <div class="profile-avatar-wrap">
+  <img id="profileAvatarImg" class="profile-avatar-img hidden" alt="Profile picture">
+  <div id="profileAvatar" class="avatar large">V</div>
+  <label class="avatar-upload" for="avatarInput">📷 Change photo</label>
+  <input id="avatarInput" type="file" accept="image/*" class="hidden">
+</div>
+        <h2 id="profileName">VIKI User</h2>
+        <p id="profileUsername" class="muted">@user</p>
+
+        <div class="stats">
+          <div><strong id="postCount">0</strong><span>Posts</span></div>
+          <div><strong id="followersCount">0</strong><span>Followers</span></div>
+          <div><strong id="followingCount">0</strong><span>Following</span></div>
+        </div>
+
+        <p id="profileBio"></p>
+      </div>
+    </section>
+
+
+    
+<section id="discoverView" class="view">
+  <div class="view-header">
+    <h2>Discover</h2>
+  </div>
+
+  <div class="search-box">
+    <input
+      id="discoverSearch"
+      type="search"
+      placeholder="Search people and creators..."
+      autocomplete="off"
+    >
+  </div>
+
+  <div id="discoverResults">
+    <div class="empty">
+      <h3>Discover people</h3>
+      <p>Find creators and connect with people on VIKI.</p>
+    </div>
+  </div>
+</section>
+
+<section id="creatorView" class="view">
+      <div class="view-header">
+        <h2>Creator Center</h2>
+      </div>
+
+      <div class="wallet-card">
+        <p>Total creator earnings</p>
+        <strong id="creatorEarnings">$0.00</strong>
+        <span id="creatorCurrency">USD</span>
+      </div>
+
+      <div class="creator-grid">
+        <div class="creator-stat">
+          <span>Creator status</span>
+          <strong id="creatorStatus">Checking...</strong>
+        </div>
+
+        <div class="creator-stat">
+          <span>VIKI share</span>
+          <strong>20%</strong>
+        </div>
+      </div>
+
+      <div class="gift-card">
+        <h3>Support a creator</h3>
+
+        <form id="giftForm">
+          <input
+            id="giftCreator"
+            type="text"
+            placeholder="@creator username"
+            required
+          >
+
+          <input
+            id="giftAmount"
+            type="number"
+            min="0.01"
+            step="0.01"
+            placeholder="Amount"
+            required
+          >
+
+          <button class="primary" type="submit">
+            💎 Send Gift
+          </button>
+        </form>
+
+        <p id="giftMessage" class="message"></p>
+      </div>
+    </section>
+
+    <section id="ownerView" class="view">
+      <div class="view-header">
+        <h2>VIKI Owner Center</h2>
+      </div>
+
+      <div id="ownerContent">
+        <div class="empty">
+          <h3>Owner dashboard</h3>
+          <p>Loading platform revenue...</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="walletView" class="view">
+      <div class="view-header">
+        <h2>Creator Wallet</h2>
+      </div>
+
+      <div class="wallet-card">
+        <p>Available balance</p>
+        <strong id="walletBalance">$0.00</strong>
+        <span id="walletCurrency">USD</span>
+      </div>
+
+      <div class="wallet-card secondary-card">
+        <p>Pending earnings</p>
+        <strong id="walletPending">$0.00</strong>
+      </div>
+
+      <div id="ledger" class="ledger"></div>
+    </section>
+
+    <section id="notificationsView" class="view">
+      <div class="view-header">
+        <h2>Notifications</h2>
+      </div>
+      <div class="empty">
+        <h3>No notifications yet</h3>
+        <p>When people interact with you, you'll see it here.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <nav id="bottomNav" class="bottom-nav hidden">
+    <button data-view="discoverView">🔎<span>Discover</span></button>
+    <button data-view="homeView">🏠<span>Home</span></button>
+    <button data-view="searchView">🔎<span>Discover</span></button>
+    <button data-view="notificationsView">🔔<span>Alerts</span></button>
+    <button data-view="profileView">👤<span>Profile</span></button>
+
+    <button data-view="walletView">💰<span>Wallet</span></button>
+    <button data-view="creatorView">💎<span>Creator</span></button>
+
+  </nav>
+
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
