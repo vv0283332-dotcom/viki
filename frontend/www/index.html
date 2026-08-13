@@ -53,6 +53,29 @@
       </div>
 
       <form id="postForm" class="composer">
+        <div class="music-picker">
+  <button type="button" id="musicBtn">🎵 Add music</button>
+
+  <div id="musicPanel" class="music-panel hidden">
+    <div class="music-search-row">
+      <input
+        id="musicSearch"
+        type="search"
+        placeholder="Search songs or artists..."
+        maxlength="100"
+      >
+      <button type="button" id="musicSearchBtn" class="primary">
+        Search
+      </button>
+    </div>
+
+    <div id="musicResults"></div>
+  </div>
+
+  <div id="selectedMusic" class="selected-music hidden"></div>
+</div>
+
+
 
         <textarea id="postContent" maxlength="5000"
           placeholder="What's happening on VIKI?"></textarea>

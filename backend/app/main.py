@@ -3,6 +3,9 @@ import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
+from urllib.parse import quote
+from urllib.request import Request, urlopen
+import json
 import os
 import cloudinary
 import cloudinary.uploader
@@ -112,6 +115,9 @@ class PostCreate(BaseModel):
     content: str = Field(min_length=1, max_length=5000)
     media_url: str = Field(default="", max_length=1000)
     media_type: str = Field(default="none", max_length=20)
+    music_url: str = Field(default="", max_length=1000)
+    music_title: str = Field(default="", max_length=255)
+    music_artist: str = Field(default="", max_length=255)
 
 
 class CommentCreate(BaseModel):
@@ -398,6 +404,69 @@ async def upload_media(
 
 
 # =========================
+# ONLINE MUSIC SEARCH
+# =========================
+
+@app.get("/music/search")
+def search_music(
+    q: str,
+    limit: int = 10,
+):
+    q = q.strip()
+
+    if not q:
+        return {"count": 0, "tracks": []}
+
+    limit = max(1, min(limit, 25))
+
+    url = (
+        "https://itunes.apple.com/search"
+        f"?term={quote(q)}"
+        "&media=music"
+        "&entity=song"
+        f"&limit={limit}"
+    )
+
+    try:
+        request = Request(
+            url,
+            headers={"User-Agent": "VIKI/1.1"},
+        )
+
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Music search unavailable: {exc}",
+        )
+
+    tracks = []
+
+    for item in payload.get("results", []):
+        preview = item.get("previewUrl")
+
+        if not preview:
+            continue
+
+        tracks.append({
+            "id": item.get("trackId"),
+            "title": item.get("trackName", ""),
+            "artist": item.get("artistName", ""),
+            "album": item.get("collectionName", ""),
+            "artwork_url": item.get("artworkUrl100", ""),
+            "preview_url": preview,
+            "store_url": item.get("trackViewUrl", ""),
+        })
+
+    return {
+        "count": len(tracks),
+        "tracks": tracks,
+    }
+
+
+# =========================
 # POSTS
 # =========================
 
@@ -412,6 +481,9 @@ def create_post(
         content=data.content.strip(),
         media_url=data.media_url.strip(),
         media_type=data.media_type.strip().lower(),
+        music_url=data.music_url.strip(),
+        music_title=data.music_title.strip(),
+        music_artist=data.music_artist.strip(),
     )
 
     db.add(post)
@@ -473,6 +545,9 @@ def get_post(
         "content": post.content,
         "media_url": post.media_url,
         "media_type": post.media_type,
+        "music_url": post.music_url,
+        "music_title": post.music_title,
+        "music_artist": post.music_artist,
         "likes": likes,
         "comments": comments,
         "created_at": post.created_at,
@@ -566,6 +641,9 @@ def feed(
             "content": post.content,
             "media_url": post.media_url,
             "media_type": post.media_type,
+            "music_url": post.music_url,
+            "music_title": post.music_title,
+            "music_artist": post.music_artist,
             "likes": likes,
             "comments": comments,
             "liked_by_me": liked,

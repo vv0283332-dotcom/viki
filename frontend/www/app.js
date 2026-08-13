@@ -3,6 +3,9 @@ const API = "https://viki-api-is.onrender.com";
 let token = localStorage.getItem("viki_token");
 let currentUser = null;
 
+let selectedMusic = null;
+let musicAudio = null;
+
 const $ = (id) => document.getElementById(id);
 
 function authHeaders() {
@@ -198,6 +201,165 @@ async function uploadPostMedia(file) {
   return data;
 }
 
+
+function clearSelectedMusic() {
+  selectedMusic = null;
+
+  if (musicAudio) {
+    musicAudio.pause();
+    musicAudio = null;
+  }
+
+  const box = $("selectedMusic");
+  if (box) {
+    box.innerHTML = "";
+    box.classList.add("hidden");
+  }
+}
+
+function selectMusic(track) {
+  selectedMusic = track;
+
+  if (musicAudio) {
+    musicAudio.pause();
+    musicAudio = null;
+  }
+
+  const box = $("selectedMusic");
+
+  box.innerHTML = `
+    <div class="selected-music-info">
+      <img
+        src="${escapeHtml(track.artwork_url || "")}"
+        alt=""
+        class="music-art"
+      >
+      <div>
+        <strong>${escapeHtml(track.title)}</strong>
+        <span>${escapeHtml(track.artist)}</span>
+      </div>
+      <button type="button" id="removeMusicBtn">✕</button>
+    </div>
+  `;
+
+  box.classList.remove("hidden");
+
+  $("removeMusicBtn").onclick = clearSelectedMusic;
+
+  $("musicPanel").classList.add("hidden");
+}
+
+function renderMusicResults(tracks) {
+  const results = $("musicResults");
+
+  if (!tracks.length) {
+    results.innerHTML = `
+      <div class="music-empty">No songs found.</div>
+    `;
+    return;
+  }
+
+  results.innerHTML = tracks.map((track, index) => `
+    <div class="music-result">
+      <img
+        src="${escapeHtml(track.artwork_url || "")}"
+        alt=""
+        class="music-art"
+      >
+
+      <div class="music-info">
+        <strong>${escapeHtml(track.title)}</strong>
+        <span>${escapeHtml(track.artist)}</span>
+        <small>${escapeHtml(track.album || "")}</small>
+      </div>
+
+      <button
+        type="button"
+        class="music-preview"
+        data-index="${index}"
+      >
+        ▶
+      </button>
+
+      <button
+        type="button"
+        class="music-select"
+        data-index="${index}"
+      >
+        +
+      </button>
+    </div>
+  `).join("");
+
+  results.querySelectorAll(".music-preview").forEach(button => {
+    button.onclick = () => {
+      const track = tracks[Number(button.dataset.index)];
+
+      if (musicAudio) {
+        musicAudio.pause();
+      }
+
+      musicAudio = new Audio(track.preview_url);
+      musicAudio.play().catch(() => {
+        alert("Unable to play this preview.");
+      });
+    };
+  });
+
+  results.querySelectorAll(".music-select").forEach(button => {
+    button.onclick = () => {
+      const track = tracks[Number(button.dataset.index)];
+      selectMusic(track);
+    };
+  });
+}
+
+async function searchMusic() {
+  const query = $("musicSearch").value.trim();
+
+  if (!query) return;
+
+  const results = $("musicResults");
+  results.innerHTML = `<div class="music-empty">Searching...</div>`;
+
+  try {
+    const data = await api(
+      `/music/search?q=${encodeURIComponent(query)}`
+    );
+
+    renderMusicResults(data.tracks || []);
+  } catch (error) {
+    results.innerHTML = `
+      <div class="music-empty">
+        ${escapeHtml(error.message)}
+      </div>
+    `;
+  }
+}
+
+if ($("musicBtn")) {
+  $("musicBtn").onclick = () => {
+    $("musicPanel").classList.toggle("hidden");
+
+    if (!$("musicPanel").classList.contains("hidden")) {
+      $("musicSearch").focus();
+    }
+  };
+}
+
+if ($("musicSearchBtn")) {
+  $("musicSearchBtn").onclick = searchMusic;
+}
+
+if ($("musicSearch")) {
+  $("musicSearch").onkeydown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      searchMusic();
+    }
+  };
+}
+
 $("postForm").onsubmit = async (event) => {
   event.preventDefault();
 
@@ -208,6 +370,10 @@ $("postForm").onsubmit = async (event) => {
   try {
     let mediaUrl = "";
     let mediaType = "none";
+
+    const musicUrl = selectedMusic?.preview_url || "";
+    const musicTitle = selectedMusic?.title || "";
+    const musicArtist = selectedMusic?.artist || "";
 
     const mediaFile = $("postMedia").files[0];
 
@@ -227,7 +393,10 @@ $("postForm").onsubmit = async (event) => {
       body: JSON.stringify({
         content,
         media_url: mediaUrl,
-        media_type: mediaType
+        media_type: mediaType,
+        music_url: musicUrl,
+        music_title: musicTitle,
+        music_artist: musicArtist
       })
     });
 
@@ -239,6 +408,8 @@ $("postForm").onsubmit = async (event) => {
     $("mediaPreview").innerHTML = "";
     $("mediaPreview").classList.add("hidden");
     $("uploadStatus").textContent = "";
+
+    clearSelectedMusic();
 
     await loadFeed();
 
@@ -277,6 +448,26 @@ async function loadFeed() {
         </div>
 
         <div class="post-content">${escapeHtml(post.content)}</div>
+
+        ${
+          post.music_url
+            ? `
+              <div class="post-music">
+                <div class="post-music-title">
+                  🎵 ${escapeHtml(post.music_title || "Music")}
+                </div>
+                <div class="post-music-artist">
+                  ${escapeHtml(post.music_artist || "")}
+                </div>
+                <audio
+                  src="${escapeHtml(post.music_url)}"
+                  controls
+                  preload="none">
+                </audio>
+              </div>
+            `
+            : ""
+        }
 
         ${
           post.media_url && post.media_type === "video"
