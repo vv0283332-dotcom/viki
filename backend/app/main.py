@@ -9,6 +9,8 @@ import json
 import os
 import cloudinary
 import cloudinary.uploader
+import httpx
+
 from fastapi import Depends, FastAPI, HTTPException, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy import func
