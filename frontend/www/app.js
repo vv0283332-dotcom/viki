@@ -1,4 +1,4 @@
-const API = "https://viki-api-is.onrender.com";
+const API = "https://viki-api.onrender.com";
 
 let token = localStorage.getItem("viki_token");
 let currentUser = null;
