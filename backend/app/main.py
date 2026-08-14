@@ -1,3 +1,5 @@
+import os
+from livekit import api as livekit_api
 from dotenv import load_dotenv
 load_dotenv()
 from datetime import datetime, timezone
@@ -1788,3 +1790,67 @@ def ledger(
         }
         for entry in entries
     ]
+
+
+# =========================
+# VIKI LIVE STREAMING
+# =========================
+
+class LiveTokenRequest(BaseModel):
+    room_name: str
+    participant_name: str | None = None
+    is_host: bool = False
+
+
+@app.post("/live/token")
+def create_live_token(
+    data: LiveTokenRequest,
+    user: User = Depends(current_user),
+):
+    live_url = os.getenv("LIVEKIT_URL")
+    live_key = os.getenv("LIVEKIT_API_KEY")
+    live_secret = os.getenv("LIVEKIT_API_SECRET")
+
+    if not live_url or not live_key or not live_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Live streaming is not configured",
+        )
+
+    room_name = data.room_name.strip()
+
+    if not room_name:
+        raise HTTPException(
+            status_code=400,
+            detail="Room name is required",
+        )
+
+    identity = (
+        data.participant_name.strip()
+        if data.participant_name
+        else f"viki-user-{user.id}"
+    )
+
+    grants = livekit_api.VideoGrants(
+        room_join=True,
+        room=room_name,
+        can_publish=data.is_host,
+        can_subscribe=True,
+        can_publish_data=True,
+    )
+
+    token = (
+        livekit_api.AccessToken(live_key, live_secret)
+        .with_identity(identity)
+        .with_name(identity)
+        .with_grants(grants)
+        .to_jwt()
+    )
+
+    return {
+        "token": token,
+        "url": live_url,
+        "room_name": room_name,
+        "identity": identity,
+        "is_host": data.is_host,
+    }
