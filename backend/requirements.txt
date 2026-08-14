@@ -10,3 +10,4 @@ email-validator
 cloudinary
 httpx
 python-dotenv
+livekit-api>=1.2.0,<2
