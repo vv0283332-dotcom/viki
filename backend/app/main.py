@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+load_dotenv()
 from datetime import datetime, timezone
 import secrets
 from fastapi.middleware.cors import CORSMiddleware
@@ -44,6 +46,7 @@ from .routers.monetization import router as monetization_router
 from .routers.discover import router as discover_router
 from .routers.profile import router as profile_router
 from .routers.rewards import router as rewards_router, add_reward
+from .payments import payment_service
 
 
 
@@ -378,11 +381,11 @@ async def upload_media(
 
     media_type = allowed[content_type]
 
-    # 100 MB maximum
+    # 300 MiB maximum
     contents = await file.read()
 
-    if len(contents) > 100 * 1024 * 1024:
-        raise HTTPException(413, "File is too large. Maximum size is 100 MB.")
+    if len(contents) > 300 * 1024 * 1024:
+        raise HTTPException(413, "File is too large. Maximum size is 300 MB.")
 
     try:
         result = cloudinary.uploader.upload(
@@ -1182,20 +1185,64 @@ def wallets(
 
 
 
-@app.post("/wallets/deposit")
-def create_deposit(
-    data: DepositRequest,
+@app.get("/wallets/payment-providers")
+async def wallet_payment_providers(
+    currency: str,
+    country: str = "",
     user: User = Depends(current_user),
-    db: Session = Depends(get_db),
 ):
-    currency = data.currency.upper()
-    amount = round(float(data.amount), 2)
-    provider = data.provider.strip().lower()
+    currency = currency.upper().strip()
+    country = country.upper().strip()
 
     if not is_supported_currency(currency):
         raise HTTPException(
             status_code=400,
             detail=f"Unsupported currency: {currency}",
+        )
+
+    providers = payment_service.available(currency, country)
+
+    return {
+        "success": True,
+        "currency": currency,
+        "country": country,
+        "providers": providers,
+    }
+
+
+class PaymentDepositRequest(BaseModel):
+    currency: str = Field(min_length=3, max_length=3)
+    amount: float = Field(gt=0, le=100000)
+    provider: str | None = None
+    country: str = Field(default="", max_length=2)
+
+
+@app.post("/wallets/deposit")
+async def create_deposit(
+    data: PaymentDepositRequest,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    currency = data.currency.upper().strip()
+    country = data.country.upper().strip()
+    amount = round(float(data.amount), 2)
+
+    if not is_supported_currency(currency):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported currency: {currency}",
+        )
+
+    try:
+        provider = payment_service.choose(
+            currency=currency,
+            country=country,
+            requested=data.provider,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
         )
 
     wallet = db.query(Wallet).filter(
@@ -1213,16 +1260,14 @@ def create_deposit(
         db.add(wallet)
         db.flush()
 
-    provider_reference = (
-        "VIKI-DEP-" + secrets.token_hex(12)
-    )
+    reference = "VIKI-DEP-" + secrets.token_hex(12)
 
     deposit = Deposit(
         user_id=user.id,
         currency=currency,
         amount=amount,
-        provider=provider,
-        provider_reference=provider_reference,
+        provider=provider.name,
+        provider_reference=reference,
         status="pending",
     )
 
@@ -1230,19 +1275,228 @@ def create_deposit(
     db.commit()
     db.refresh(deposit)
 
-    return {
-        "success": True,
-        "message": "Deposit created and awaiting payment verification",
-        "development_only": True,
-        "deposit": {
-            "id": deposit.id,
+    frontend_url = os.getenv(
+        "VIKI_FRONTEND_URL",
+        "https://viki-d0o8.onrender.com"
+    ).rstrip("/")
+
+    callback_url = (
+        f"{frontend_url}/?payment=success"
+        f"&reference={reference}"
+    )
+
+    try:
+        payment = await provider.initialize(
+            reference=reference,
+            amount=amount,
+            currency=currency,
+            email=user.email,
+            name=user.full_name,
+            callback_url=callback_url,
+            metadata={
+                "viki_user_id": user.id,
+                "deposit_id": deposit.id,
+                "currency": currency,
+            },
+        )
+
+        return {
+            "success": True,
+            "message": "Payment checkout created",
+            "provider": provider.name,
+            "checkout_url": payment["checkout_url"],
+            "provider_reference": payment["provider_reference"],
+            "deposit": {
+                "id": deposit.id,
+                "currency": deposit.currency,
+                "amount": deposit.amount,
+                "status": deposit.status,
+            },
+        }
+
+    except Exception as exc:
+        deposit.status = "failed"
+        db.commit()
+
+        raise HTTPException(
+            status_code=502,
+            detail=f"Payment initialization failed: {str(exc)}",
+        )
+
+
+@app.post("/wallets/deposit/verify/{reference}")
+async def verify_wallet_deposit(
+    reference: str,
+    user: User = Depends(current_user),
+    db: Session = Depends(get_db),
+):
+    # The provider reference is unique at the database level and is also
+    # restricted to the authenticated user's deposit.
+    deposit = db.query(Deposit).filter(
+        Deposit.provider_reference == reference,
+        Deposit.user_id == user.id,
+    ).first()
+
+    if not deposit:
+        raise HTTPException(
+            status_code=404,
+            detail="Deposit not found",
+        )
+
+    # Idempotent retry: a previously completed deposit must never be credited
+    # again.
+    if deposit.status == "completed":
+        wallet = db.query(Wallet).filter(
+            Wallet.user_id == user.id,
+            Wallet.currency == deposit.currency,
+        ).first()
+
+        return {
+            "success": True,
+            "message": "Deposit already credited",
+            "status": "completed",
+            "balance": wallet.available if wallet else 0,
             "currency": deposit.currency,
-            "amount": deposit.amount,
-            "provider": deposit.provider,
-            "provider_reference": deposit.provider_reference,
-            "status": deposit.status,
-        },
-    }
+            "reference": reference,
+        }
+
+    try:
+        provider = payment_service.get(deposit.provider)
+        result = await provider.verify(reference)
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Payment verification failed: {str(exc)}",
+        )
+
+    paid_amount = float(result.get("amount") or 0)
+
+    # Paystack returns subunits such as kobo.
+    if deposit.provider == "paystack":
+        paid_amount = paid_amount / 100
+
+    paid_currency = str(
+        result.get("currency") or deposit.currency
+    ).upper()
+
+    if not result.get("success"):
+        return {
+            "success": False,
+            "status": result.get("status", "pending"),
+            "message": "Payment has not been completed yet.",
+        }
+
+    if paid_currency != deposit.currency:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment currency does not match the deposit currency",
+        )
+
+    if round(paid_amount, 2) < round(deposit.amount, 2):
+        raise HTTPException(
+            status_code=400,
+            detail="Verified payment amount is less than the deposit amount",
+        )
+
+    try:
+        # IMPORTANT:
+        # Atomically claim this deposit.
+        #
+        # Only one request can change pending -> completed.
+        # If another request is verifying the same reference at the same
+        # time, its UPDATE will affect zero rows after the first transaction
+        # commits, so it will not credit the wallet again.
+        claimed = (
+            db.query(Deposit)
+            .filter(
+                Deposit.id == deposit.id,
+                Deposit.user_id == user.id,
+                Deposit.status != "completed",
+            )
+            .update(
+                {
+                    Deposit.status: "completed",
+                    Deposit.completed_at: datetime.now(timezone.utc),
+                },
+                synchronize_session=False,
+            )
+        )
+
+        if claimed != 1:
+            db.rollback()
+
+            wallet = db.query(Wallet).filter(
+                Wallet.user_id == user.id,
+                Wallet.currency == deposit.currency,
+            ).first()
+
+            return {
+                "success": True,
+                "message": "Deposit already credited",
+                "status": "completed",
+                "balance": wallet.available if wallet else 0,
+                "currency": deposit.currency,
+                "reference": reference,
+            }
+
+        wallet = db.query(Wallet).filter(
+            Wallet.user_id == user.id,
+            Wallet.currency == deposit.currency,
+        ).first()
+
+        if not wallet:
+            wallet = Wallet(
+                user_id=user.id,
+                currency=deposit.currency,
+                available=0,
+                pending=0,
+            )
+            db.add(wallet)
+            db.flush()
+
+        # The deposit has been atomically claimed above. This request is now
+        # the only request allowed to perform the wallet credit.
+        wallet.available = round(
+            wallet.available + deposit.amount,
+            2,
+        )
+
+        ledger = LedgerEntry(
+            user_id=user.id,
+            entry_type="deposit",
+            amount=deposit.amount,
+            currency=deposit.currency,
+            description=f"Wallet funding via {deposit.provider}",
+            reference=reference,
+        )
+        db.add(ledger)
+
+        # Wallet credit, ledger entry and completed deposit are committed
+        # together. If anything fails, the entire transaction rolls back.
+        db.commit()
+        db.refresh(wallet)
+
+        return {
+            "success": True,
+            "message": "Wallet funded successfully",
+            "status": "completed",
+            "balance": wallet.available,
+            "currency": wallet.currency,
+            "reference": reference,
+        }
+
+    except HTTPException:
+        db.rollback()
+        raise
+
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Wallet funding could not be completed: {str(exc)}",
+        )
+
 
 @app.post("/wallets/exchange")
 def exchange_wallet(

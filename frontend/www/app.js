@@ -378,8 +378,8 @@ $("postForm").onsubmit = async (event) => {
     const mediaFile = $("postMedia").files[0];
 
     if (mediaFile) {
-      if (mediaFile.size > 100 * 1024 * 1024) {
-        throw new Error("Media must be 100 MB or smaller.");
+      if (mediaFile.size > 300 * 1024 * 1024) {
+        throw new Error("Media must be 300 MB or smaller.");
       }
 
       const uploaded = await uploadPostMedia(mediaFile);
@@ -641,6 +641,151 @@ async function loadProfile() {
   }
 }
 
+
+async function loadPaymentProviders() {
+  const select = $("fundProvider");
+  if (!select) return;
+
+  try {
+    const currency =
+      ($("walletCurrency")?.textContent || "USD").trim();
+
+    const country =
+      ($("fundCountry")?.value || "").trim().toUpperCase();
+
+    const data = await api(
+      `/wallets/payment-providers?currency=${encodeURIComponent(currency)}&country=${encodeURIComponent(country)}`
+    );
+
+    select.innerHTML = "";
+
+    if (!data.providers.length) {
+      select.innerHTML =
+        `<option value="">No configured provider</option>`;
+
+      return;
+    }
+
+    data.providers.forEach(provider => {
+      const option = document.createElement("option");
+      option.value = provider;
+      option.textContent =
+        provider.charAt(0).toUpperCase() + provider.slice(1);
+
+      select.appendChild(option);
+    });
+
+  } catch (error) {
+    console.error("Payment providers:", error);
+
+    select.innerHTML =
+      `<option value="">Unable to load providers</option>`;
+  }
+}
+
+
+async function startWalletFunding(event) {
+  event.preventDefault();
+
+  const amount = Number($("fundAmount").value);
+  const currency =
+    ($("walletCurrency")?.textContent || "USD").trim();
+
+  const country =
+    ($("fundCountry")?.value || "").trim().toUpperCase();
+
+  const provider =
+    ($("fundProvider")?.value || "").trim();
+
+  const message = $("fundWalletMessage");
+  const button = $("fundWalletBtn");
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    message.textContent = "Enter a valid amount.";
+    return;
+  }
+
+  if (!provider) {
+    message.textContent =
+      "No payment provider is currently configured for this currency.";
+    return;
+  }
+
+  button.disabled = true;
+  message.textContent = "Creating secure payment checkout...";
+
+  try {
+    const data = await api("/wallets/deposit", {
+      method: "POST",
+      body: JSON.stringify({
+        amount,
+        currency,
+        country,
+        provider
+      })
+    });
+
+    if (!data.checkout_url) {
+      throw new Error("Payment checkout URL was not returned.");
+    }
+
+    localStorage.setItem(
+      "viki_pending_deposit",
+      data.provider_reference
+    );
+
+    message.textContent =
+      "Opening secure payment page...";
+
+    window.location.href = data.checkout_url;
+
+  } catch (error) {
+    message.textContent = error.message;
+    button.disabled = false;
+  }
+}
+
+
+async function verifyReturnedPayment() {
+  const params = new URLSearchParams(window.location.search);
+
+  const reference =
+    params.get("reference") ||
+    localStorage.getItem("viki_pending_deposit");
+
+  if (!reference) return;
+
+  try {
+    const result =
+      await api(
+        `/wallets/deposit/verify/${encodeURIComponent(reference)}`,
+        {method: "POST"}
+      );
+
+    if (result.success && result.status === "completed") {
+      localStorage.removeItem("viki_pending_deposit");
+
+      alert(
+        `Wallet funded successfully: ${Number(result.balance).toFixed(2)} ${result.currency}`
+      );
+
+      await loadWallet();
+    }
+
+  } catch (error) {
+    console.error("Payment verification:", error);
+  }
+
+  if (window.location.search) {
+    window.history.replaceState(
+      {},
+      document.title,
+      window.location.pathname
+    );
+  }
+}
+
+
 async function loadWallet() {
   try {
     const data = await api("/wallet");
@@ -653,6 +798,8 @@ async function loadWallet() {
 
     $("walletCurrency").textContent =
       data.currency;
+
+    await loadPaymentProviders();
 
     const ledger = await api("/wallet/ledger");
 
@@ -1027,3 +1174,22 @@ if (avatarInput) {
     }
   });
 }
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const form = $("fundWalletForm");
+
+  if (form) {
+    form.onsubmit = startWalletFunding;
+  }
+
+  const country = $("fundCountry");
+
+  if (country) {
+    country.addEventListener("input", () => {
+      loadPaymentProviders();
+    });
+  }
+});
+
+verifyReturnedPayment();
