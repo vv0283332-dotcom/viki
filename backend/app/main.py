@@ -154,13 +154,16 @@ def register(
     db: Session = Depends(get_db),
 ):
     username = data.username.strip().lower()
-    email = str(data.email).lower()
+    email = str(data.email).strip().lower()
 
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(409, "Username already exists")
 
-    if db.query(User).filter(User.email == email).first():
-        raise HTTPException(409, "Email already exists")
+    if db.query(User).filter(User.email.ilike(email)).first():
+        raise HTTPException(
+            status_code=409,
+            detail="Email already registered. Please log in instead.",
+        )
 
     user = User(
         username=username,
