@@ -98,10 +98,11 @@ $("registerForm").onsubmit = async (event) => {
     const data = await api("/auth/register", {
       method: "POST",
       body: JSON.stringify({
-        full_name: $("registerName").value,
-        username: $("registerUsername").value,
-        email: $("registerEmail").value,
-        password: $("registerPassword").value
+        full_name: $("registerName").value.trim(),
+        username: $("registerUsername").value.trim(),
+        email: $("registerEmail").value.trim().toLowerCase(),
+        password: $("registerPassword").value,
+        currency: "USD"
       })
     });
 
